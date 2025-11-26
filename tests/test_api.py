@@ -1,6 +1,7 @@
 from typing import List
 
 import pytest
+from sqlalchemy import StaticPool
 
 pytest.importorskip("fastapi")
 pytest.importorskip("sqlmodel")
@@ -29,7 +30,11 @@ except ImportError:  # pragma: no cover - fallback for offline test execution
 @pytest.fixture()
 def test_client(monkeypatch):
     """Provide a TestClient with an isolated in-memory database."""
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     SQLModel.metadata.create_all(engine)
 
     def get_session_override():
@@ -93,6 +98,7 @@ def test_save_and_get_characters(test_client):
     }
 
     save_response = test_client.post("/api/character/save", json=payload)
+    print("save_response:", save_response.status_code, save_response.text)
     assert save_response.status_code == 200
     save_data = save_response.json()
     assert save_data["code"] == 0
@@ -102,3 +108,6 @@ def test_save_and_get_characters(test_client):
     characters = list_response.json()
     assert any(char["id"] == 2 for char in characters)
     assert characters[0]["name_full"] == "Sakura Haruno"
+
+
+#PYTHONPATH=. pytest --alluredir=allure-results
