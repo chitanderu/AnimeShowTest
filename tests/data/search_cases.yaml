@@ -1,0 +1,15 @@
+# tests/data/search_cases.yaml
+
+- name: "正常搜索 Naruto"
+  query: "Naruto"
+  expect_status: 200
+  expect_code: 0          # 接口里返回的 data["code"]
+
+- name: "名字为空"
+  query: ""
+  expect_status: 400
+
+
+- name: "随便乱输 - 应该未找到"
+  query: "this-name-should-not-exist-xyz123"
+  expect_status: 404
