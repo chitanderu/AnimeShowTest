@@ -9,7 +9,9 @@ pytest.importorskip("sqlmodel")
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine
 
-import main
+from app.main import app
+from app.database import get_session
+from app.services import AniListService
 
 try:  # pragma: no cover - compatibility shim when allure is unavailable
     import allure
@@ -41,10 +43,10 @@ def test_client(monkeypatch):
         with Session(engine) as session:
             yield session
 
-    main.app.dependency_overrides[main.get_session] = get_session_override
-    with TestClient(main.app) as client:
+    app.dependency_overrides[get_session] = get_session_override
+    with TestClient(app) as client:
         yield client
-    main.app.dependency_overrides.clear()
+    app.dependency_overrides.clear()
 
 
 @allure.feature("character search")
@@ -66,7 +68,7 @@ def test_search_character_success(monkeypatch, test_client):
     def fake_search(name: str, per_page: int = 5) -> List[dict]:
         return mock_characters
 
-    monkeypatch.setattr(main, "search_characters_from_anilist", fake_search)
+    monkeypatch.setattr(AniListService, "search_characters", classmethod(lambda cls, *args, **kwargs: fake_search(*args, **kwargs)))
 
     response = test_client.get("/api/character/search", params={"name": "Naruto"})
     assert response.status_code == 200

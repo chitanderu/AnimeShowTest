@@ -27,7 +27,7 @@
         <div class="image-container">
           <img
             class="character-image"
-            :src="character.image_url || defaultImage"
+            :src="character.image.medium || defaultImage"
             :alt="character.name_full || character.name_native || '角色图片'"
             @error="handleImageError"
           />

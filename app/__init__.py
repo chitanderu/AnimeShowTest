@@ -1,0 +1,1 @@
+# AnimeShow FastAPI Application

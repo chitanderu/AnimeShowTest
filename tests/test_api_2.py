@@ -4,19 +4,22 @@ from pathlib import Path
 
 import pytest
 import yaml
-from sqlalchemy.pool import StaticPool  # ✅ 注意这里是 from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import StaticPool
 
 pytest.importorskip("fastapi")
 pytest.importorskip("sqlmodel")
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine
+
 ## 只跑新文件里的测试
 #PYTHONPATH=. pytest tests/test_api_2.py --alluredir=allure-results
 
 #allure serve allure-results
 
-import main
+from app.main import app
+from app.database import get_session
+from app.services import AniListService
 
 # ---- Allure 兼容处理：没有安装 allure 也能运行测试 ----
 try:  # pragma: no cover - compatibility shim when allure is unavailable
@@ -48,17 +51,13 @@ def test_client(monkeypatch):
         with Session(engine) as session:
             yield session
 
-    # 覆盖掉 main.get_session，让接口用 sqlite 而不是 MySQL
-    main.app.dependency_overrides[main.get_session] = get_session_override
+    # 覆盖掉 get_session，让接口用 sqlite 而不是 MySQL
+    app.dependency_overrides[get_session] = get_session_override
 
-    # 测试时不跑 MySQL 的 startup/shutdown 事件
-    main.app.router.on_startup.clear()
-    main.app.router.on_shutdown.clear()
-
-    with TestClient(main.app) as client:
+    with TestClient(app) as client:
         yield client
 
-    main.app.dependency_overrides.clear()
+    app.dependency_overrides.clear()
 
 
 # ========= 下面是你原来的三个测试，用来对比 =========
@@ -85,7 +84,7 @@ def test_search_character_success(monkeypatch, test_client):
         return mock_characters
 
     # 用 monkeypatch 把真实的 AniList 调用替换掉，避免发真实网络请求
-    monkeypatch.setattr(main, "search_characters_from_anilist", fake_search)
+    monkeypatch.setattr(AniListService, "search_characters", classmethod(lambda cls, *args, **kwargs: fake_search(*args, **kwargs)))
 
     response = test_client.get("/api/character/search", params={"name": "Naruto"})
     assert response.status_code == 200
@@ -156,30 +155,35 @@ def test_search_character_with_yaml(monkeypatch, test_client, case):
     """
     query = case["query"]
 
-    # 如果 query 非空，则 mock 掉 search_characters_from_anilist，返回固定数据
+    # 如果 query 非空，则 mock 掉 AniListService.search_characters
     if query.strip():
-        def fake_search(name: str, per_page: int = 5) -> List[dict]:
-            return [
-                {
-                    "id": 1,
-                    "name": {
-                        "full": "Naruto Uzumaki",
-                        "native": "うずまき ナルト",
-                        "alternative": [],
-                    },
-                    "image": {"large": "large.jpg", "medium": "medium.jpg"},
-                    "description": "Ninja",
-                    "gender": "Male",
-                    "age": "17",
-                    "dateOfBirth": {"year": 1990, "month": 10, "day": 10},
-                    "bloodType": "O",
-                    "favourites": 100,
-                    "siteUrl": "https://example.com",
-                    "media": {"edges": []},
-                }
-            ]
+        # 根据期望状态码决定返回数据还是空列表
+        if case["expect_status"] == 404:
+            def fake_search(name: str, per_page: int = 5) -> List[dict]:
+                return []  # 返回空列表，模拟未找到
+        else:
+            def fake_search(name: str, per_page: int = 5) -> List[dict]:
+                return [
+                    {
+                        "id": 1,
+                        "name": {
+                            "full": "Naruto Uzumaki",
+                            "native": "うずまき ナルト",
+                            "alternative": [],
+                        },
+                        "image": {"large": "large.jpg", "medium": "medium.jpg"},
+                        "description": "Ninja",
+                        "gender": "Male",
+                        "age": "17",
+                        "dateOfBirth": {"year": 1990, "month": 10, "day": 10},
+                        "bloodType": "O",
+                        "favourites": 100,
+                        "siteUrl": "https://example.com",
+                        "media": {"edges": []},
+                    }
+                ]
 
-        monkeypatch.setattr(main, "search_characters_from_anilist", fake_search)
+        monkeypatch.setattr(AniListService, "search_characters", classmethod(lambda cls, *args, **kwargs: fake_search(*args, **kwargs)))
 
     # 1. 发请求
     resp = test_client.get("/api/character/search", params={"name": query})
