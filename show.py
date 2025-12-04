@@ -99,7 +99,7 @@ if __name__ == "__main__":
             print(f"性别: {char.get('gender')}")
             print(f"年龄: {char.get('age')}")
             print(f"收藏数: {char.get('favourites')}")
-            print(f"图片: {char.get('image', {}).get('medium')}")
+            print(f"图片: {char.get('image', {}).get('large')}")
             print(f"作品数量: {len(char.get('media', {}).get('edges', []))}")
             print()
 
